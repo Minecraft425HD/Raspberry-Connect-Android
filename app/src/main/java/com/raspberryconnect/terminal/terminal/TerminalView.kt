@@ -402,15 +402,13 @@ class TerminalView @JvmOverloads constructor(
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val emu = emulator
-        val isPrintableFromSoftKeyboard = !KeyMapper.isControlKey(keyCode) &&
-            !event.isCtrlPressed &&
-            event.deviceId == android.view.KeyCharacterMap.VIRTUAL_KEYBOARD &&
-            event.unicodeChar > 0
-        if (isPrintableFromSoftKeyboard) {
-            // Let the IME's commitText() deliver this so composing/autocorrect keyboards work.
-            return super.onKeyDown(keyCode, event)
-        }
-
+        // Some on-screen keyboards deliver plain letters as real KeyEvents via
+        // InputConnection.sendKeyEvent() rather than commitText() - a previous version
+        // tried to defer those to commitText() to play nicer with autocorrect/composing
+        // keyboards, but on keyboards that only ever use sendKeyEvent for letters, that
+        // silently dropped every typed character. Always handle it here instead; the
+        // small risk of a double-send from a keyboard that does both is far less harmful
+        // than input never arriving at all.
         val ctrlActive = event.isCtrlPressed || stickyCtrl
         val bytes = KeyMapper.map(
             keyCode = keyCode,
