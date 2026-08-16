@@ -18,6 +18,7 @@ import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputMethodManager
 import androidx.core.content.ContextCompat
 import com.raspberryconnect.terminal.R
 import kotlin.math.max
@@ -90,7 +91,9 @@ class TerminalView @JvmOverloads constructor(
                 endSelection()
                 return true
             }
-            return false
+            requestFocus()
+            showKeyboard()
+            return true
         }
     })
 
@@ -106,6 +109,8 @@ class TerminalView @JvmOverloads constructor(
         scrollOffset = 0
         requestLayoutForCurrentSize()
         invalidate()
+        requestFocus()
+        post { showKeyboard() }
     }
 
     /** Call after feeding new bytes into the emulator to repaint and snap to the live view. */
@@ -234,6 +239,17 @@ class TerminalView @JvmOverloads constructor(
         }
         gestureDetector.onTouchEvent(event)
         return true
+    }
+
+    /** Custom Views don't get the soft keyboard automatically on focus like EditText does. */
+    fun showKeyboard() {
+        val imm = context.getSystemService(InputMethodManager::class.java) ?: return
+        imm.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    fun hideKeyboard() {
+        val imm = context.getSystemService(InputMethodManager::class.java) ?: return
+        imm.hideSoftInputFromWindow(windowToken, 0)
     }
 
     private fun viewRowColAt(x: Float, y: Float): Pair<Int, Int> {
