@@ -1,13 +1,18 @@
 package com.raspberryconnect.terminal.terminal
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.text.InputType
 import android.util.AttributeSet
+import android.view.ActionMode
 import android.view.GestureDetector
 import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
@@ -55,8 +60,18 @@ class TerminalView @JvmOverloads constructor(
     /** Set by the extra-keys row's "Ctrl" toggle; applies to the next key press only. */
     var stickyCtrl = false
 
+    // Text selection (for copy), in view-row/column coordinates.
+    private var selecting = false
+    private var selStartRow = 0
+    private var selStartCol = 0
+    private var selEndRow = 0
+    private var selEndCol = 0
+    private var actionMode: ActionMode? = null
+    private val selectionHighlightPaint = Paint().apply { color = 0x668AB4F8.toInt() }
+
     private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
+            if (selecting) return false
             val emu = emulator ?: return false
             val lineDelta = (distanceY / charHeight).toInt()
             if (lineDelta == 0) return false
@@ -64,6 +79,18 @@ class TerminalView @JvmOverloads constructor(
             scrollOffset = (scrollOffset + lineDelta).coerceIn(0, maxOffset)
             invalidate()
             return true
+        }
+
+        override fun onLongPress(e: MotionEvent) {
+            beginSelectionAtWord(e.x, e.y)
+        }
+
+        override fun onSingleTapUp(e: MotionEvent): Boolean {
+            if (selecting) {
+                endSelection()
+                return true
+            }
+            return false
         }
     })
 
@@ -116,22 +143,48 @@ class TerminalView @JvmOverloads constructor(
 
         val rows = emu.rows
         val cols = emu.cols
-        val history = emu.scrollback
 
         for (viewRow in 0 until rows) {
-            val logicalIndex = viewRow - scrollOffset
-            val cells: Array<TerminalCell> = when {
-                logicalIndex < 0 -> {
-                    val historyIndex = history.size + logicalIndex
-                    if (historyIndex in history.indices) history[historyIndex] else continue
-                }
-                else -> emu.rowAt(logicalIndex)
-            }
+            val cells = cellsForViewRow(viewRow) ?: continue
             drawRow(canvas, cells, viewRow, cols)
+        }
+
+        if (selecting) {
+            drawSelectionHighlight(canvas, cols)
         }
 
         if (scrollOffset == 0 && emu.cursorVisible && hasFocus()) {
             drawCursor(canvas, emu.cursorRow, emu.cursorCol)
+        }
+    }
+
+    /** Resolves a view row (0 = top of the visible viewport) to its cells, honoring scrollOffset. */
+    private fun cellsForViewRow(viewRow: Int): Array<TerminalCell>? {
+        val emu = emulator ?: return null
+        val history = emu.scrollback
+        val logicalIndex = viewRow - scrollOffset
+        return if (logicalIndex < 0) {
+            val historyIndex = history.size + logicalIndex
+            if (historyIndex in history.indices) history[historyIndex] else null
+        } else if (logicalIndex < emu.rows) {
+            emu.rowAt(logicalIndex)
+        } else {
+            null
+        }
+    }
+
+    private fun drawSelectionHighlight(canvas: Canvas, cols: Int) {
+        val (startRow, startCol, endRow, endCol) = normalizedSelection()
+        for (viewRow in startRow..endRow) {
+            val lineStartCol = if (viewRow == startRow) startCol else 0
+            val lineEndCol = if (viewRow == endRow) endCol else cols - 1
+            if (lineEndCol < lineStartCol) continue
+            val y = viewRow * charHeight
+            canvas.drawRect(
+                lineStartCol * charWidth, y,
+                (lineEndCol + 1) * charWidth, y + charHeight,
+                selectionHighlightPaint
+            )
         }
     }
 
@@ -172,8 +225,117 @@ class TerminalView @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!isFocused) requestFocus()
+        if (selecting && event.actionMasked == MotionEvent.ACTION_MOVE) {
+            val (row, col) = viewRowColAt(event.x, event.y)
+            selEndRow = row
+            selEndCol = col
+            invalidate()
+            return true
+        }
         gestureDetector.onTouchEvent(event)
         return true
+    }
+
+    private fun viewRowColAt(x: Float, y: Float): Pair<Int, Int> {
+        val emu = emulator
+        val row = (y / charHeight).toInt().coerceAtLeast(0)
+        val maxCol = ((emu?.cols ?: 1) - 1).coerceAtLeast(0)
+        val col = (x / charWidth).toInt().coerceIn(0, maxCol)
+        return row to col
+    }
+
+    private fun beginSelectionAtWord(x: Float, y: Float) {
+        val (row, col) = viewRowColAt(x, y)
+        val cells = cellsForViewRow(row) ?: return
+        var start = col.coerceIn(0, cells.size - 1)
+        var end = start
+        if (cells[start].char != ' ') {
+            while (start > 0 && cells[start - 1].char != ' ') start--
+            while (end < cells.size - 1 && cells[end + 1].char != ' ') end++
+        }
+        selStartRow = row
+        selStartCol = start
+        selEndRow = row
+        selEndCol = end
+        selecting = true
+        actionMode = startActionMode(selectionActionModeCallback, ActionMode.TYPE_FLOATING)
+        invalidate()
+    }
+
+    private fun endSelection() {
+        selecting = false
+        actionMode?.finish()
+        actionMode = null
+        invalidate()
+    }
+
+    private data class SelectionRange(val startRow: Int, val startCol: Int, val endRow: Int, val endCol: Int)
+
+    private fun normalizedSelection(): SelectionRange {
+        return if (selStartRow < selEndRow || (selStartRow == selEndRow && selStartCol <= selEndCol)) {
+            SelectionRange(selStartRow, selStartCol, selEndRow, selEndCol)
+        } else {
+            SelectionRange(selEndRow, selEndCol, selStartRow, selStartCol)
+        }
+    }
+
+    private fun extractSelectedText(): String {
+        val (startRow, startCol, endRow, endCol) = normalizedSelection()
+        val lines = mutableListOf<String>()
+        for (viewRow in startRow..endRow) {
+            val cells = cellsForViewRow(viewRow) ?: continue
+            val lineStartCol = if (viewRow == startRow) startCol else 0
+            val lineEndCol = (if (viewRow == endRow) endCol else cells.size - 1).coerceAtMost(cells.size - 1)
+            if (lineEndCol < lineStartCol) {
+                lines.add("")
+                continue
+            }
+            val text = (lineStartCol..lineEndCol).joinToString("") { cells[it].char.toString() }
+            lines.add(text.trimEnd())
+        }
+        return lines.joinToString("\n")
+    }
+
+    private fun copySelectionToClipboard() {
+        val text = extractSelectedText()
+        if (text.isEmpty()) return
+        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        clipboard?.setPrimaryClip(ClipData.newPlainText("terminal", text))
+    }
+
+    /** Sends the device clipboard's text content to the remote shell, as if typed. */
+    fun pasteFromClipboard() {
+        val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
+        val text = clipboard.primaryClip?.let { clip ->
+            if (clip.itemCount > 0) clip.getItemAt(0).coerceToText(context)?.toString() else null
+        } ?: return
+        if (text.isEmpty()) return
+        listener?.onInput(text.replace("\n", "\r").toByteArray(Charsets.UTF_8))
+    }
+
+    private val selectionActionModeCallback = object : ActionMode.Callback {
+        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+            menu.add(0, MENU_ID_COPY, 0, R.string.action_copy)
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            return true
+        }
+
+        override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean = false
+
+        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+            if (item.itemId == MENU_ID_COPY) {
+                copySelectionToClipboard()
+                endSelection()
+                return true
+            }
+            return false
+        }
+
+        override fun onDestroyActionMode(mode: ActionMode) {
+            selecting = false
+            actionMode = null
+            invalidate()
+        }
     }
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
@@ -237,5 +399,9 @@ class TerminalView @JvmOverloads constructor(
             return true
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    companion object {
+        private const val MENU_ID_COPY = 1
     }
 }

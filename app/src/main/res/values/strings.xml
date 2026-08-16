@@ -21,6 +21,8 @@
     <string name="action_delete">Löschen</string>
     <string name="action_cancel">Abbrechen</string>
     <string name="action_connect">Verbinden</string>
+    <string name="action_copy">Kopieren</string>
+    <string name="action_paste">Einfügen</string>
 
     <string name="error_name_required">Bitte einen Namen eingeben</string>
     <string name="error_host_required">Bitte Host/IP eingeben</string>

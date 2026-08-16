@@ -159,6 +159,7 @@ class TerminalActivity : AppCompatActivity(), TerminalInputListener {
         addExtraKey(row, "↓") { sendSpecialKey(KeyEvent.KEYCODE_DPAD_DOWN) }
         addExtraKey(row, "←") { sendSpecialKey(KeyEvent.KEYCODE_DPAD_LEFT) }
         addExtraKey(row, "→") { sendSpecialKey(KeyEvent.KEYCODE_DPAD_RIGHT) }
+        addExtraKey(row, getString(R.string.action_paste)) { binding.terminalView.pasteFromClipboard() }
         addExtraKey(row, "|") { sendBytes(byteArrayOf('|'.code.toByte())) }
         addExtraKey(row, "~") { sendBytes(byteArrayOf('~'.code.toByte())) }
         addExtraKey(row, "/") { sendBytes(byteArrayOf('/'.code.toByte())) }
