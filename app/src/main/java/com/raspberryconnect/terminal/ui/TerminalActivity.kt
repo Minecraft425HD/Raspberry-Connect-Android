@@ -8,9 +8,12 @@ import android.os.Bundle
 import android.os.IBinder
 import android.view.KeyEvent
 import android.view.View
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -37,6 +40,7 @@ class TerminalActivity : AppCompatActivity(), TerminalInputListener {
 
     private var service: TerminalConnectionService? = null
     private var hostKeyDialogShowing = false
+    private var observersStarted = false
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
@@ -45,7 +49,14 @@ class TerminalActivity : AppCompatActivity(), TerminalInputListener {
             if (bound.currentProfileId != profile.id) {
                 bound.connect(profile)
             }
-            observeService(bound)
+            // onServiceConnected fires again on every bindService() call (e.g. each time
+            // the app returns to the foreground) even though the same long-running
+            // service is still connected - only ever attach the flow collectors once,
+            // or every reconnect adds another subscriber and output gets fed twice.
+            if (!observersStarted) {
+                observersStarted = true
+                observeService(bound)
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
@@ -72,6 +83,18 @@ class TerminalActivity : AppCompatActivity(), TerminalInputListener {
 
         binding.terminalView.attach(emulator, this)
         buildExtraKeysRow()
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val imeVisible = ViewCompat.getRootWindowInsets(binding.root)
+                    ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                if (imeVisible) {
+                    binding.terminalView.hideKeyboard()
+                } else {
+                    finish()
+                }
+            }
+        })
     }
 
     override fun onStart() {

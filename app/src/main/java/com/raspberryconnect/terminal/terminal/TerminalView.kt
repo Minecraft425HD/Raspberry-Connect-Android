@@ -379,6 +379,13 @@ class TerminalView @JvmOverloads constructor(
             }
 
             override fun sendKeyEvent(event: KeyEvent): Boolean {
+                if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+                    // Let this go through the normal dispatch chain (BaseInputConnection's
+                    // default behavior) instead of our custom key routing below - that's
+                    // what makes "hide keyboard" dismiss just the keyboard instead of the
+                    // synthetic BACK event falling through and closing the whole activity.
+                    return super.sendKeyEvent(event)
+                }
                 if (event.action == KeyEvent.ACTION_DOWN) {
                     return this@TerminalView.onKeyDown(event.keyCode, event)
                 }
