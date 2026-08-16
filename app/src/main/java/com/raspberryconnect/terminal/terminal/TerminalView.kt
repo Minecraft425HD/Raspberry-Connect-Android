@@ -359,10 +359,23 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
-        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        // TYPE_TEXT_VARIATION_VISIBLE_PASSWORD is the standard trick terminal apps use to
+        // force keyboards out of predictive/composing mode: with plain TYPE_CLASS_TEXT,
+        // many keyboards start "composing" a word after the first letter (autocorrect
+        // candidate tracking) instead of committing each keystroke immediately, so only
+        // the first character - sent before composing kicked in - ever reached us.
+        // Password-variation fields are expected to receive raw keystrokes, so keyboards
+        // skip composing/autocorrect for them entirely. We never render it as a password
+        // field ourselves (we draw the terminal, not a text box), so there's no dot-masking.
+        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or
+            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or
+            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
         return object : BaseInputConnection(this, false) {
+            private var composingText = ""
+
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
+                composingText = ""
                 if (stickyCtrl && text.length == 1) {
                     stickyCtrl = false
                     val ctrlByte = KeyMapper.controlByteForChar(text[0])
@@ -373,6 +386,36 @@ class TerminalView @JvmOverloads constructor(
                 }
                 listener?.onInput(text.toString().toByteArray(Charsets.UTF_8))
                 return true
+            }
+
+            override fun setComposingText(text: CharSequence, newCursorPosition: Int): Boolean {
+                // Defensive fallback for keyboards that still compose despite the
+                // password-variation hint above: setComposingText() replaces the whole
+                // composing span each call rather than appending, so diff against what we
+                // last saw and only send the actual change - otherwise every update would
+                // re-send the whole (growing) word and duplicate characters on screen.
+                val new = text.toString()
+                when {
+                    new.startsWith(composingText) -> {
+                        val added = new.substring(composingText.length)
+                        if (added.isNotEmpty()) listener?.onInput(added.toByteArray(Charsets.UTF_8))
+                    }
+                    composingText.startsWith(new) -> {
+                        val removed = composingText.length - new.length
+                        repeat(removed) { listener?.onInput(byteArrayOf(0x7F.toByte())) }
+                    }
+                    else -> {
+                        repeat(composingText.length) { listener?.onInput(byteArrayOf(0x7F.toByte())) }
+                        if (new.isNotEmpty()) listener?.onInput(new.toByteArray(Charsets.UTF_8))
+                    }
+                }
+                composingText = new
+                return true
+            }
+
+            override fun finishComposingText(): Boolean {
+                composingText = ""
+                return super.finishComposingText()
             }
 
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
