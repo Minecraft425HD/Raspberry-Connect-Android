@@ -74,7 +74,11 @@ class TerminalView @JvmOverloads constructor(
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
             if (selecting) return false
             val emu = emulator ?: return false
-            val lineDelta = (distanceY / charHeight).toInt()
+            // GestureDetector reports distanceY as (previous - current) touch position, so
+            // dragging a finger DOWN the screen - the natural gesture to reveal older
+            // content above, like pulling down a chat history - yields a NEGATIVE value.
+            // Flip the sign so that drag matches scroll direction.
+            val lineDelta = (-distanceY / charHeight).toInt()
             if (lineDelta == 0) return false
             val maxOffset = emu.scrollback.size
             scrollOffset = (scrollOffset + lineDelta).coerceIn(0, maxOffset)

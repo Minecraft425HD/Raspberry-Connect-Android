@@ -26,6 +26,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,8 +61,29 @@ class TerminalConnectionService : LifecycleService() {
     private val _output = MutableSharedFlow<ByteArray>(extraBufferCapacity = 64)
     val output = _output.asSharedFlow()
 
+    // Keystrokes are queued here and written by a single dedicated coroutine (below),
+    // instead of each sendInput() call spawning its own write - concurrent, unsynchronized
+    // writes to the same SSH channel OutputStream from multiple IO-dispatcher threads can
+    // interleave or reorder bytes, corrupting or garbling what the remote shell sees/echoes.
+    private val inputQueue = Channel<ByteArray>(capacity = Channel.UNLIMITED)
+
     inner class LocalBinder : Binder() {
         fun getService(): TerminalConnectionService = this@TerminalConnectionService
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        lifecycleScope.launch(Dispatchers.IO) {
+            for (bytes in inputQueue) {
+                val out = channel?.output ?: continue
+                try {
+                    out.write(bytes)
+                    out.flush()
+                } catch (e: IOException) {
+                    // Read loop observes the same failure and drives reconnect/state updates.
+                }
+            }
+        }
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -94,15 +116,7 @@ class TerminalConnectionService : LifecycleService() {
     }
 
     fun sendInput(bytes: ByteArray) {
-        val out = channel?.output ?: return
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                out.write(bytes)
-                out.flush()
-            } catch (e: IOException) {
-                // Read loop will observe the failure and drive reconnect/state updates.
-            }
-        }
+        inputQueue.trySend(bytes)
     }
 
     fun resize(cols: Int, rows: Int) {
