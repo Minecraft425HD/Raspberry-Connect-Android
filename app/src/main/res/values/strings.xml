@@ -1,0 +1,49 @@
+<resources>
+    <string name="app_name">Pi Terminal</string>
+
+    <string name="connections_title">Verbindungen</string>
+    <string name="add_connection">Neue Verbindung</string>
+    <string name="edit_connection">Verbindung bearbeiten</string>
+    <string name="no_connections">Noch keine Verbindung gespeichert.\nTippe auf + um eine hinzuzufügen.</string>
+
+    <string name="field_name">Name</string>
+    <string name="field_host">Host / IP-Adresse</string>
+    <string name="field_port">Port</string>
+    <string name="field_username">Benutzername</string>
+    <string name="field_password">Passwort</string>
+    <string name="field_private_key">Privater Schlüssel (OpenSSH-Format)</string>
+    <string name="field_passphrase">Passphrase (optional)</string>
+    <string name="auth_type_password">Passwort</string>
+    <string name="auth_type_key">Privater Schlüssel</string>
+    <string name="keep_connection_alive">Verbindung im Hintergrund halten</string>
+
+    <string name="action_save">Speichern</string>
+    <string name="action_delete">Löschen</string>
+    <string name="action_cancel">Abbrechen</string>
+    <string name="action_connect">Verbinden</string>
+
+    <string name="error_name_required">Bitte einen Namen eingeben</string>
+    <string name="error_host_required">Bitte Host/IP eingeben</string>
+    <string name="error_port_invalid">Ungültiger Port (1–65535)</string>
+    <string name="error_username_required">Bitte Benutzername eingeben</string>
+    <string name="error_password_required">Bitte Passwort eingeben</string>
+    <string name="error_key_required">Bitte privaten Schlüssel einfügen</string>
+
+    <string name="notif_channel_name">Aktive SSH-Verbindungen</string>
+    <string name="notif_connected">Verbunden mit %1$s</string>
+    <string name="notif_connecting">Verbinde mit %1$s…</string>
+    <string name="notif_reconnecting">Verbindung unterbrochen – erneuter Versuch mit %1$s…</string>
+    <string name="notif_disconnect_action">Trennen</string>
+
+    <string name="host_key_dialog_title">Host-Schlüssel bestätigen</string>
+    <string name="host_key_new_message">Der Fingerabdruck des Servers wurde noch nicht bestätigt:\n\n%1$s\n\nMöchtest du diesem Server vertrauen?</string>
+    <string name="host_key_changed_message">WARNUNG: Der Host-Schlüssel von %1$s hat sich geändert!\n\nErwartet: %2$s\nErhalten: %3$s\n\nDies kann auf einen Man-in-the-Middle-Angriff hindeuten. Neu installierte Systeme oder ein neu aufgesetzter Pi können dies ebenfalls verursachen. Trotzdem verbinden?</string>
+    <string name="action_trust">Vertrauen</string>
+    <string name="action_reject">Ablehnen</string>
+
+    <string name="terminal_disconnected">Getrennt</string>
+    <string name="terminal_reconnect">Neu verbinden</string>
+    <string name="terminal_connecting">Verbinde…</string>
+    <string name="terminal_reconnecting">Verbindung unterbrochen – erneuter Versuch…</string>
+    <string name="history_drawer_title">Zuletzt gesendet</string>
+</resources>

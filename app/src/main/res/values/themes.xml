@@ -1,0 +1,13 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.PiTerminal" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/pi_green</item>
+        <item name="colorPrimaryDark">@color/pi_green_dark</item>
+        <item name="colorAccent">@color/pi_green</item>
+        <item name="android:statusBarColor" tools:targetApi="21">@color/surface_dark</item>
+        <item name="android:windowBackground">@color/surface_dark</item>
+    </style>
+
+    <style name="Theme.PiTerminal.Terminal">
+        <item name="android:windowBackground">@color/terminal_bg</item>
+    </style>
+</resources>
