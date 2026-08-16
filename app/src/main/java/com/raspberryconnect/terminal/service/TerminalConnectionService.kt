@@ -55,6 +55,13 @@ class TerminalConnectionService : LifecycleService() {
     private var userInitiatedDisconnect = false
     private var wakeLock: PowerManager.WakeLock? = null
 
+    // The TerminalView reports its actual on-screen size once laid out, which can race
+    // with the SSH connection completing. Remembering it means a fresh PTY is always
+    // allocated at the real size instead of a hardcoded default, and a resize() call
+    // that arrives before the channel exists isn't silently lost.
+    private var lastKnownCols = 80
+    private var lastKnownRows = 24
+
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     val state: StateFlow<ConnectionState> = _state
 
@@ -120,6 +127,8 @@ class TerminalConnectionService : LifecycleService() {
     }
 
     fun resize(cols: Int, rows: Int) {
+        lastKnownCols = cols
+        lastKnownRows = rows
         channel?.resize(cols, rows)
     }
 
@@ -156,9 +165,14 @@ class TerminalConnectionService : LifecycleService() {
                     password = profile.password,
                     privateKeyPem = profile.privateKey,
                     passphrase = profile.passphrase,
-                    hostKeyStore = hostKeyStore
+                    hostKeyStore = hostKeyStore,
+                    initialCols = lastKnownCols,
+                    initialRows = lastKnownRows
                 )
                 val newChannel = transport.connect(config)
+                // Covers the case where the view's real size became known while this
+                // connection attempt was in flight, after the config above was built.
+                newChannel.resize(lastKnownCols, lastKnownRows)
                 channel = newChannel
                 acquireWakeLock()
                 attempt = 0
