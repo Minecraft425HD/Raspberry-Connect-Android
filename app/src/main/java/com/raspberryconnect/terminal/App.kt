@@ -23,8 +23,13 @@ class App : Application() {
      * the real, full bcprov-jdk18on implementation bundled with the app.
      */
     private fun installBouncyCastleProvider() {
-        Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
-        Security.insertProviderAt(BouncyCastleProvider(), 1)
+        try {
+            Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
+            Security.insertProviderAt(BouncyCastleProvider(), 1)
+        } catch (e: Exception) {
+            // Never let provider setup crash app startup; worst case SSH connections
+            // fail later with a clear error instead of the app being unusable.
+        }
     }
 
     private fun createNotificationChannel() {
