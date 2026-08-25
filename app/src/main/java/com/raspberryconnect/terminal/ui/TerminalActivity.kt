@@ -14,10 +14,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.appcompat.widget.AppCompatButton
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.google.android.material.button.MaterialButton
 import com.raspberryconnect.terminal.R
 import com.raspberryconnect.terminal.data.ConnectionProfile
 import com.raspberryconnect.terminal.data.ConnectionRepository
@@ -176,7 +176,12 @@ class TerminalActivity : AppCompatActivity(), TerminalInputListener {
         val ctrlButton = addExtraKey(row, "Ctrl") { }
         ctrlButton.setOnClickListener {
             binding.terminalView.stickyCtrl = !binding.terminalView.stickyCtrl
-            ctrlButton.isChecked = binding.terminalView.stickyCtrl
+            ctrlButton.setBackgroundColor(
+                ContextCompat.getColor(
+                    this,
+                    if (binding.terminalView.stickyCtrl) R.color.pi_green else R.color.surface_card
+                )
+            )
         }
         addExtraKey(row, "↑") { sendSpecialKey(KeyEvent.KEYCODE_DPAD_UP) }
         addExtraKey(row, "↓") { sendSpecialKey(KeyEvent.KEYCODE_DPAD_DOWN) }
@@ -189,13 +194,14 @@ class TerminalActivity : AppCompatActivity(), TerminalInputListener {
         addExtraKey(row, "-") { sendBytes(byteArrayOf('-'.code.toByte())) }
     }
 
-    private fun addExtraKey(row: android.widget.LinearLayout, label: String, onClick: () -> Unit): MaterialButton {
-        val button = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+    private fun addExtraKey(row: android.widget.LinearLayout, label: String, onClick: () -> Unit): AppCompatButton {
+        val button = AppCompatButton(this).apply {
             text = label
-            isCheckable = label == "Ctrl"
+            isAllCaps = false
             minWidth = 0
             minimumWidth = 0
             setPadding(28, 8, 28, 8)
+            setBackgroundColor(ContextCompat.getColor(context, R.color.surface_card))
             setTextColor(ContextCompat.getColor(context, R.color.terminal_fg))
             setOnClickListener { onClick() }
         }
