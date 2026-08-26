@@ -143,6 +143,17 @@ class TerminalConnectionService : LifecycleService() {
         stopSelf()
     }
 
+    /**
+     * Called when the user swipes the app away from the recent-apps list - as opposed to
+     * just backgrounding it (home button, screen off, switching apps), which should keep
+     * the connection alive. Swiping away is treated as "close the app": fully disconnect
+     * and stop the service instead of continuing to run invisibly.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        disconnect()
+    }
+
     private suspend fun runConnectionLoop(profile: ConnectionProfile) {
         var attempt = 0
         var everConnected = false
