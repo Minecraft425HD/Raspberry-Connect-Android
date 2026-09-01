@@ -8,13 +8,16 @@ import android.os.Bundle
 import android.os.IBinder
 import android.view.KeyEvent
 import android.view.View
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.appcompat.widget.AppCompatButton
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.google.android.material.button.MaterialButton
 import com.raspberryconnect.terminal.R
 import com.raspberryconnect.terminal.data.ConnectionProfile
 import com.raspberryconnect.terminal.data.ConnectionRepository
@@ -37,6 +40,7 @@ class TerminalActivity : AppCompatActivity(), TerminalInputListener {
 
     private var service: TerminalConnectionService? = null
     private var hostKeyDialogShowing = false
+    private var observersStarted = false
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
@@ -45,7 +49,14 @@ class TerminalActivity : AppCompatActivity(), TerminalInputListener {
             if (bound.currentProfileId != profile.id) {
                 bound.connect(profile)
             }
-            observeService(bound)
+            // onServiceConnected fires again on every bindService() call (e.g. each time
+            // the app returns to the foreground) even though the same long-running
+            // service is still connected - only ever attach the flow collectors once,
+            // or every reconnect adds another subscriber and output gets fed twice.
+            if (!observersStarted) {
+                observersStarted = true
+                observeService(bound)
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
@@ -72,6 +83,18 @@ class TerminalActivity : AppCompatActivity(), TerminalInputListener {
 
         binding.terminalView.attach(emulator, this)
         buildExtraKeysRow()
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val imeVisible = ViewCompat.getRootWindowInsets(binding.root)
+                    ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                if (imeVisible) {
+                    binding.terminalView.hideKeyboard()
+                } else {
+                    finish()
+                }
+            }
+        })
     }
 
     override fun onStart() {
@@ -153,25 +176,32 @@ class TerminalActivity : AppCompatActivity(), TerminalInputListener {
         val ctrlButton = addExtraKey(row, "Ctrl") { }
         ctrlButton.setOnClickListener {
             binding.terminalView.stickyCtrl = !binding.terminalView.stickyCtrl
-            ctrlButton.isChecked = binding.terminalView.stickyCtrl
+            ctrlButton.setBackgroundColor(
+                ContextCompat.getColor(
+                    this,
+                    if (binding.terminalView.stickyCtrl) R.color.pi_green else R.color.surface_card
+                )
+            )
         }
         addExtraKey(row, "↑") { sendSpecialKey(KeyEvent.KEYCODE_DPAD_UP) }
         addExtraKey(row, "↓") { sendSpecialKey(KeyEvent.KEYCODE_DPAD_DOWN) }
         addExtraKey(row, "←") { sendSpecialKey(KeyEvent.KEYCODE_DPAD_LEFT) }
         addExtraKey(row, "→") { sendSpecialKey(KeyEvent.KEYCODE_DPAD_RIGHT) }
+        addExtraKey(row, getString(R.string.action_paste)) { binding.terminalView.pasteFromClipboard() }
         addExtraKey(row, "|") { sendBytes(byteArrayOf('|'.code.toByte())) }
         addExtraKey(row, "~") { sendBytes(byteArrayOf('~'.code.toByte())) }
         addExtraKey(row, "/") { sendBytes(byteArrayOf('/'.code.toByte())) }
         addExtraKey(row, "-") { sendBytes(byteArrayOf('-'.code.toByte())) }
     }
 
-    private fun addExtraKey(row: android.widget.LinearLayout, label: String, onClick: () -> Unit): MaterialButton {
-        val button = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+    private fun addExtraKey(row: android.widget.LinearLayout, label: String, onClick: () -> Unit): AppCompatButton {
+        val button = AppCompatButton(this).apply {
             text = label
-            isCheckable = label == "Ctrl"
+            isAllCaps = false
             minWidth = 0
             minimumWidth = 0
             setPadding(28, 8, 28, 8)
+            setBackgroundColor(ContextCompat.getColor(context, R.color.surface_card))
             setTextColor(ContextCompat.getColor(context, R.color.terminal_fg))
             setOnClickListener { onClick() }
         }

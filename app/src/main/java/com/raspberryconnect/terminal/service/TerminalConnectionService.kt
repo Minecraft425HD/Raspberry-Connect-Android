@@ -26,6 +26,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,14 +55,42 @@ class TerminalConnectionService : LifecycleService() {
     private var userInitiatedDisconnect = false
     private var wakeLock: PowerManager.WakeLock? = null
 
+    // The TerminalView reports its actual on-screen size once laid out, which can race
+    // with the SSH connection completing. Remembering it means a fresh PTY is always
+    // allocated at the real size instead of a hardcoded default, and a resize() call
+    // that arrives before the channel exists isn't silently lost.
+    private var lastKnownCols = 80
+    private var lastKnownRows = 24
+
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     val state: StateFlow<ConnectionState> = _state
 
     private val _output = MutableSharedFlow<ByteArray>(extraBufferCapacity = 64)
     val output = _output.asSharedFlow()
 
+    // Keystrokes are queued here and written by a single dedicated coroutine (below),
+    // instead of each sendInput() call spawning its own write - concurrent, unsynchronized
+    // writes to the same SSH channel OutputStream from multiple IO-dispatcher threads can
+    // interleave or reorder bytes, corrupting or garbling what the remote shell sees/echoes.
+    private val inputQueue = Channel<ByteArray>(capacity = Channel.UNLIMITED)
+
     inner class LocalBinder : Binder() {
         fun getService(): TerminalConnectionService = this@TerminalConnectionService
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        lifecycleScope.launch(Dispatchers.IO) {
+            for (bytes in inputQueue) {
+                val out = channel?.output ?: continue
+                try {
+                    out.write(bytes)
+                    out.flush()
+                } catch (e: IOException) {
+                    // Read loop observes the same failure and drives reconnect/state updates.
+                }
+            }
+        }
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -94,18 +123,12 @@ class TerminalConnectionService : LifecycleService() {
     }
 
     fun sendInput(bytes: ByteArray) {
-        val out = channel?.output ?: return
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                out.write(bytes)
-                out.flush()
-            } catch (e: IOException) {
-                // Read loop will observe the failure and drive reconnect/state updates.
-            }
-        }
+        inputQueue.trySend(bytes)
     }
 
     fun resize(cols: Int, rows: Int) {
+        lastKnownCols = cols
+        lastKnownRows = rows
         channel?.resize(cols, rows)
     }
 
@@ -118,6 +141,17 @@ class TerminalConnectionService : LifecycleService() {
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /**
+     * Called when the user swipes the app away from the recent-apps list - as opposed to
+     * just backgrounding it (home button, screen off, switching apps), which should keep
+     * the connection alive. Swiping away is treated as "close the app": fully disconnect
+     * and stop the service instead of continuing to run invisibly.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        disconnect()
     }
 
     private suspend fun runConnectionLoop(profile: ConnectionProfile) {
@@ -142,9 +176,14 @@ class TerminalConnectionService : LifecycleService() {
                     password = profile.password,
                     privateKeyPem = profile.privateKey,
                     passphrase = profile.passphrase,
-                    hostKeyStore = hostKeyStore
+                    hostKeyStore = hostKeyStore,
+                    initialCols = lastKnownCols,
+                    initialRows = lastKnownRows
                 )
                 val newChannel = transport.connect(config)
+                // Covers the case where the view's real size became known while this
+                // connection attempt was in flight, after the config above was built.
+                newChannel.resize(lastKnownCols, lastKnownRows)
                 channel = newChannel
                 acquireWakeLock()
                 attempt = 0
