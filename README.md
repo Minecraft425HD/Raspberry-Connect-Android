@@ -108,4 +108,6 @@ Die Test-Suite deckt sowohl reine Logik (Terminal-Emulator, Tastatur-Mapping, Re
 
 ## Lizenz
 
+Copyright (C) 2026 Luckas R. Schneider
+
 Dieses Projekt steht unter der [GNU General Public License v3.0](LICENSE) (GPL-3.0). Das bedeutet insbesondere: Du darfst die App frei nutzen, verändern und weitergeben, musst dabei aber den Quellcode (auch von Änderungen) unter derselben Lizenz verfügbar machen.
