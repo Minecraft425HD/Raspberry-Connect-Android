@@ -1,5 +1,7 @@
 # Pi Terminal
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 Eine native Android-App für den SSH-Zugriff auf den Raspberry Pi – als Ersatz für den browserbasierten "Pi Connect", der auf Android zwei große Schwachstellen hat: keine Befehls-Historie über die Pfeiltasten und häufige Verbindungsabbrüche, sobald der Browser in den Hintergrund wandert.
 
 Pi Terminal öffnet eine echte SSH-Sitzung mit einem echten Pseudo-Terminal (PTY) – genau wie ein Terminal-Programm am PC. Dadurch übernimmt die Shell auf dem Pi (bash/zsh) selbst die Zeilenbearbeitung, und Pfeiltasten-Historie, Tab-Vervollständigung & Co. funktionieren wie gewohnt.
@@ -106,4 +108,4 @@ Die Test-Suite deckt sowohl reine Logik (Terminal-Emulator, Tastatur-Mapping, Re
 
 ## Lizenz
 
-Bisher keine Lizenz festgelegt.
+Dieses Projekt steht unter der [GNU General Public License v3.0](LICENSE) (GPL-3.0). Das bedeutet insbesondere: Du darfst die App frei nutzen, verändern und weitergeben, musst dabei aber den Quellcode (auch von Änderungen) unter derselben Lizenz verfügbar machen.
